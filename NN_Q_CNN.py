@@ -19,19 +19,22 @@ import chainer.functions as F
 import chainer.links as L
 from chainer.training import extensions
 
+
 READFILE_NAME = "qtable_category.csv"
 FOLDER_PASS = "/Users/takashi/Documents/knowledge/qtable/"
 SEED = 1145141919
 
 batchsize = 128
-max_epoch = 10
+max_epoch = 500
 
 filename = []
 category = []
 data_set = []
 np.random.seed(SEED)
+
 if chainer.cuda.available:
     chainer.cuda.cupy.random.seed(SEED)
+
 
 # csvファイルの読み込み
 with open(READFILE_NAME, 'r') as o:
@@ -40,17 +43,28 @@ with open(READFILE_NAME, 'r') as o:
         filename.append(row[0])
         category.append(row[1])
 category = np.array(category, dtype=np.int)
+z = len(filename)
 for i in range(0,len(filename)):
     csvfile = str(FOLDER_PASS + filename[i])
     with open(csvfile, 'r') as o:
         dataReader = csv.reader(o)
-        qtable = []
+        qtable = np.zeros((5, 10, 10))
+        x = 0
+        y = 0
         for row in dataReader:
-            qtable.append(row[3])
+            a = int(row[2])
+            qtable[a][x][y] = row[3]
+            if a == 4:
+                x = x+1
+                if x == 10:
+                    y = y+1
+                    x = 0
         qtable = np.array(qtable, dtype=np.float32)
-        qtable = qtable.flatten()
         data_set.append([qtable,category[i]])
+    z = z - 1
+
 indices = np.arange(len(data_set))
+
 i = np.random.choice(indices, 2500, replace=False)
 np.random.shuffle(i)
 data_set = np.array(data_set)
@@ -80,20 +94,31 @@ valid_iter = iterators.SerialIterator(valid, batchsize, repeat=False, shuffle=Fa
 test = datasets.TupleDataset(test_X, test_Y)
 
 class MLP(chainer.Chain):
-    def __init__(self, n_mid_units=500, n_out=8):
+    def __init__(self, n_out=8):
         super(MLP, self).__init__()
-
-        # パラメータを持つ層の登録
         with self.init_scope():
-            self.l1 = L.Linear(None, n_mid_units)
-            self.l2 = L.Linear(n_mid_units, n_mid_units)
-            self.l3 = L.Linear(n_mid_units, n_out)
+            self.conv1_1 = L.Convolution2D(None, 16, ksize=5, pad=2, nobias=True)
+            self.conv1_2 = L.Convolution2D(None, 16, ksize=5, pad=2, nobias=True)
+            self.conv2_1 = L.Convolution2D(None, 32, ksize=3, pad=1, nobias=True)
+            self.conv2_2 = L.Convolution2D(None, 32, ksize=3, pad=1, nobias=True)
+            self.fc1 = L.Linear(None, 512, nobias=True)
+            self.fc2 = L.Linear(None, n_out, nobias=True)
 
     def __call__(self, x):
-        # データを受け取った際のforward計算を書く
-        h1 = F.relu(self.l1(x))
-        h2 = F.relu(self.l2(h1))
-        return self.l3(h2)
+        conv1_1 = self.conv1_1(x)
+        conv1_1 = F.relu(conv1_1)
+        conv1_2 = self.conv1_2(conv1_1)
+        conv1_2 = F.relu(conv1_2)
+        pool1 = F.max_pooling_2d(conv1_2, ksize=2, stride=2)
+        conv2_1 = self.conv2_1(pool1)
+        conv2_1 = F.relu(conv2_1)
+        conv2_2 = self.conv2_2(conv2_1)
+        conv2_2 = F.relu(conv2_2)
+        pool2 = F.max_pooling_2d(conv2_2, ksize=2, stride=2)
+        fc1 = self.fc1(pool2)
+        fc1 = F.relu(fc1)
+        fc2 = self.fc2(fc1)
+        return fc2
 
 
 model = L.Classifier(MLP())
@@ -101,7 +126,7 @@ optimizer = optimizers.SGD()
 optimizer.setup(model)
 
 updater = training.StandardUpdater(train_iter, optimizer)
-filename = "result_Qonly_" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+filename = "result_Q_CNN_" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 trainer = training.Trainer(updater, (max_epoch, 'epoch'), out=filename)
 
 trainer.extend(extensions.Evaluator(valid_iter, model))
