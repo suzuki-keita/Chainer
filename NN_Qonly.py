@@ -8,6 +8,7 @@ Created on 2018-08-31
 
 import numpy as np
 import csv
+import datetime
 
 import chainer
 from chainer import cuda, Function, gradient_check, report, training, utils, Variable
@@ -23,7 +24,7 @@ FOLDER_PASS = "/Users/takashi/Documents/knowledge/qtable/"
 SEED = 1145141919
 
 batchsize = 128
-max_epoch = 50
+max_epoch = 10
 
 filename = []
 category = []
@@ -45,7 +46,7 @@ for i in range(0,len(filename)):
         dataReader = csv.reader(o)
         qtable = []
         for row in dataReader:
-            qtable.append([row[0], row[1], row[2], row[3]])
+            qtable.append(row[3])
         qtable = np.array(qtable, dtype=np.float32)
         qtable = qtable.flatten()
         data_set.append([qtable,category[i]])
@@ -76,10 +77,10 @@ train, valid = datasets.split_dataset_random(datasets.TupleDataset(train_X, trai
 train_iter = iterators.SerialIterator(train, batchsize)
 valid_iter = iterators.SerialIterator(valid, batchsize, repeat=False, shuffle=False)
 # 500個のtestデータがtest用データになる
-#test_iter = iterators.SerialIterator(test_data, batchsize, repeat=False, shuffle=False)
+test = datasets.TupleDataset(test_X, test_Y)
 
 class MLP(chainer.Chain):
-    def __init__(self, n_mid_units=2000, n_out=8):
+    def __init__(self, n_mid_units=500, n_out=8):
         super(MLP, self).__init__()
 
         # パラメータを持つ層の登録
@@ -100,16 +101,26 @@ optimizer = optimizers.SGD()
 optimizer.setup(model)
 
 updater = training.StandardUpdater(train_iter, optimizer)
-trainer = training.Trainer(updater, (max_epoch, 'epoch'), out='result')
+filename = "result_" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+trainer = training.Trainer(updater, (max_epoch, 'epoch'), out=filename)
 
 trainer.extend(extensions.Evaluator(valid_iter, model))
 trainer.extend(extensions.LogReport())
-trainer.extend(extensions.PrintReport(['epoch', 'main/loss', 'main/accuracy', 'elapsed_time']))
+trainer.extend(extensions.PrintReport(
+    ['epoch', 'main/loss', 'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
 trainer.extend(extensions.PlotReport(
-    ['main/loss'], x_key='epoch', file_name='loss.png'))
+    ['main/loss', 'validation/main/loss'], x_key='epoch', file_name='loss.png'))
 trainer.extend(extensions.PlotReport(
-    ['main/accuracy'], x_key='epoch', file_name='accuracy.png'))
+    ['main/accuracy', 'validation/main/accuracy'], x_key='epoch', file_name='accuracy.png'))
 trainer.extend(extensions.dump_graph('main/accuracy'))
 trainer.extend(extensions.ProgressBar())
-
 trainer.run()
+
+test_iter = iterators.MultiprocessIterator(test, batchsize, False, False)
+test_evaluator = extensions.Evaluator(test_iter, model)
+results = test_evaluator()
+print('Test accuracy:', results['main/accuracy'])
+
+accuracy_file = filename + "/Test_accuracy.txt"
+with open(accuracy_file, mode="w") as w:
+    w.write('%s' %results['main/accuracy'])
