@@ -19,12 +19,12 @@ import chainer.functions as F
 import chainer.links as L
 from chainer.training import extensions
 
-READFILE_NAME = "qtable_category.csv"
-FOLDER_PASS = "/Users/takashi/Documents/knowledge/qtable/"
+READFILE_NAME = "output2.csv"
+FOLDER_PASS = "/Users/takashi/Documents/knowledge/qtable_1/"
 SEED = 1145141919
 
 batchsize = 128
-max_epoch = 10
+max_epoch = 1000
 
 filename = []
 category = []
