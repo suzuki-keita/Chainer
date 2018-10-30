@@ -1,0 +1,6 @@
+epoch:1000
+Data:2500
+Training_data:1600
+Validation_data:400
+test_data:500
+SEED:1145141919

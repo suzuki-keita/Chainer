@@ -1,0 +1,4 @@
+Data:6000
+Training_data:4000
+Validation_data:1000
+test_data:1000
